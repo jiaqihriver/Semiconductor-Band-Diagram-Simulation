@@ -24,7 +24,7 @@
 
 ## 🚀 使用方法
 
-1. 将提供的 `band_simulator.html` 文件保存到本地。
+1. 将提供的 `band_diagram_simulator.html` 文件保存到本地。
 2. 使用现代浏览器（Chrome, Firefox, Edge 等）打开该文件。
 3. 通过左侧面板调整参数：
    - 选择材料（硅/锗/砷化镓）

@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>半导体能带仿真（简并区 np ≠ nᵢ²）</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            display: flex;
+            flex-direction: row;
+            justify-content: center;
+            align-items: flex-start;
+            height: 100vh;
+        }
+        #control-panel {
+            width: 340px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-right: 20px;
+        }
+        #control-panel h2 {
+            margin-top: 0;
+            color: #333;
+        }
+        .control-group {
+            margin-bottom: 20px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 15px;
+        }
+        .control-group label {
+            font-weight: 600;
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+        }
+        .radio-group {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+        .radio-group input {
+            margin-right: 4px;
+        }
+        .slider-container {
+            margin: 10px 0;
+        }
+        .slider-container input[type=range] {
+            width: 100%;
+        }
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9em;
+            color: #666;
+        }
+        .input-with-unit {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-top: 5px;
+        }
+        .input-with-unit input {
+            flex: 1;
+            padding: 4px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        .input-with-unit span {
+            font-size: 0.9em;
+            color: #666;
+        }
+        .input-hint {
+            font-size: 0.8em;
+            color: #999;
+            margin-top: 2px;
+        }
+        #info-panel {
+            background-color: #e9f0f9;
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 20px;
+            font-family: monospace;
+            line-height: 1.6;
+        }
+        #info-panel .warning {
+            color: #c00;
+            font-weight: bold;
+        }
+        #canvas-container {
+            flex: 1;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        canvas {
+            width: 100%;
+            height: 400px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #fafafa;
+        }
+        .note {
+            font-size: 0.85em;
+            color: #888;
+            margin-top: 10px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="control-panel">
+        <h2>⚙️ 参数控制</h2>
+        
+        <!-- 材料选择 -->
+        <div class="control-group">
+            <label>半导体材料</label>
+            <div class="radio-group">
+                <label><input type="radio" name="material" value="Si" checked> 硅 (Si)</label>
+                <label><input type="radio" name="material" value="Ge"> 锗 (Ge)</label>
+                <label><input type="radio" name="material" value="GaAs"> 砷化镓 (GaAs)</label>
+            </div>
+        </div>
+
+        <!-- 掺杂类型 -->
+        <div class="control-group">
+            <label>掺杂类型</label>
+            <div class="radio-group">
+                <label><input type="radio" name="dopType" value="n" checked> n型</label>
+                <label><input type="radio" name="dopType" value="p"> p型</label>
+                <label><input type="radio" name="dopType" value="intrinsic"> 本征</label>
+            </div>
+        </div>
+
+        <!-- 掺杂浓度 -->
+        <div class="control-group">
+            <label>掺杂浓度 (cm⁻³)</label>
+            <div class="slider-container">
+                <input type="range" id="concSlider" min="12" max="19" value="16" step="0.1">
+                <div class="slider-label">
+                    <span>1e12</span>
+                    <span id="concValue">1.0e16</span>
+                    <span>1e19</span>
+                </div>
+            </div>
+            <div class="input-with-unit">
+                <input type="text" id="concInput" value="1.0e16" placeholder="例如 2.5e17">
+                <span>cm⁻³</span>
+            </div>
+            <div class="input-hint">输入后按回车更新</div>
+        </div>
+
+        <!-- 温度 -->
+        <div class="control-group">
+            <label>温度 (K)</label>
+            <div class="slider-container">
+                <input type="range" id="tempSlider" min="5" max="500" value="300" step="1">
+                <div class="slider-label">
+                    <span>5 K</span>
+                    <span id="tempValue">300 K</span>
+                    <span>500 K</span>
+                </div>
+            </div>
+            <div class="input-with-unit">
+                <input type="text" id="tempInput" value="300" placeholder="例如 77">
+                <span>K</span>
+            </div>
+            <div class="input-hint">输入后按回车更新</div>
+        </div>
+
+        <!-- 信息面板（包含质量作用定律 + 带隙） -->
+        <div id="info-panel">
+            <div><strong>📊 载流子浓度</strong></div>
+            <div>n = <span id="nVal">--</span> cm⁻³</div>
+            <div>p = <span id="pVal">--</span> cm⁻³</div>
+            <div>n·p = <span id="npVal">--</span> cm⁻⁶</div>
+            <div>nᵢ² = <span id="ni2Val">--</span> cm⁻⁶</div>
+            <div style="margin-top:8px;"><strong>费米能级 E<sub>f</sub></strong> = <span id="efVal">--</span> eV</div>
+            <!-- 显示禁带宽度 -->
+            <div><strong>禁带宽度 E<sub>g</sub></strong> = <span id="egVal">--</span> eV</div>
+            <div id="degeneracyWarning" class="warning" style="display:none;">⚠️ 简并区（质量作用定律失效）</div>
+        </div>
+        <div class="note">简并区采用简化修正，仅作趋势示意</div>
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="bandCanvas" width="600" height="400"></canvas>
+        <div class="note">红色: Ev (0 eV) | 蓝色: Ec | 绿色虚线: Ef</div>
+    </div>
+
+    <script>
+        // 材料数据库 (300K 参考值)
+        const materials = {
+            Si: {
+                name: '硅',
+                Eg: 1.12,          // eV
+                Nc300: 2.86e19,     // cm^{-3}
+                Nv300: 2.66e19
+            },
+            Ge: {
+                name: '锗',
+                Eg: 0.67,
+                Nc300: 1.04e19,
+                Nv300: 6.0e18
+            },
+            GaAs: {
+                name: '砷化镓',
+                Eg: 1.424,
+                Nc300: 4.7e17,
+                Nv300: 7.0e18
+            }
+        };
+
+        // 当前材料参数 (默认为 Si)
+        let currentMat = { ...materials.Si };
+
+        const T0 = 300;                // 参考温度 (K)
+        const kB = 8.617e-5;            // 玻尔兹曼常数 (eV/K)
+
+        // DOM 元素
+        const canvas = document.getElementById('bandCanvas');
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+
+        const concSlider = document.getElementById('concSlider');
+        const tempSlider = document.getElementById('tempSlider');
+        const concValue = document.getElementById('concValue');
+        const tempValue = document.getElementById('tempValue');
+        const concInput = document.getElementById('concInput');
+        const tempInput = document.getElementById('tempInput');
+
+        const nSpan = document.getElementById('nVal');
+        const pSpan = document.getElementById('pVal');
+        const npSpan = document.getElementById('npVal');
+        const ni2Span = document.getElementById('ni2Val');
+        const efSpan = document.getElementById('efVal');
+        const egSpan = document.getElementById('egVal');
+        const degeneracyWarning = document.getElementById('degeneracyWarning');
+
+        const materialRadios = document.querySelectorAll('input[name="material"]');
+        const dopTypeRadios = document.querySelectorAll('input[name="dopType"]');
+
+        // ---------- 工具函数 ----------
+        function toScientific(x, digits=2) {
+            if (x === 0) return "0";
+            let exp = Math.floor(Math.log10(x));
+            let mant = x / Math.pow(10, exp);
+            return mant.toFixed(digits) + 'e' + exp;
+        }
+
+        // 从字符串解析浮点数（支持科学计数法）
+        function parseScientific(str) {
+            str = str.trim().toLowerCase();
+            let num = parseFloat(str);
+            if (isNaN(num)) return NaN;
+            return num;
+        }
+
+        // ---------- 材料相关函数 ----------
+        function Nc(T) {
+            return currentMat.Nc300 * Math.pow(T / T0, 1.5);
+        }
+        function Nv(T) {
+            return currentMat.Nv300 * Math.pow(T / T0, 1.5);
+        }
+        function ni(T) {
+            return Math.sqrt(Nc(T) * Nv(T)) * Math.exp(-currentMat.Eg / (2 * kB * T));
+        }
+        function intrinsicEf(T) {
+            return currentMat.Eg / 2 + (kB * T / 2) * Math.log(Nv(T) / Nc(T));
+        }
+
+        // ---------- 扩展的费米能级求解（允许 Ef 超出能带）----------
+        function solveFermiNtype(Nd, T) {
+            if (Nd <= 0) return intrinsicEf(T);
+            const Eg = currentMat.Eg;
+            const left = -0.5;
+            const right = Eg + 0.5;
+
+            function f(Ef) {
+                let n = Nc(T) * Math.exp(-(Eg - Ef) / (kB * T));
+                let p = Nv(T) * Math.exp(-Ef / (kB * T));
+                return n - p - Nd;
+            }
+
+            let fl = f(left);
+            let fr = f(right);
+            if (fl * fr > 0) {
+                return (fl < 0) ? right : left;
+            }
+
+            let l = left, r = right;
+            for (let iter = 0; iter < 200; iter++) {
+                let mid = (l + r) / 2;
+                let fm = f(mid);
+                if (Math.abs(fm) < 1e-12) return mid;
+                if (fl * fm <= 0) {
+                    r = mid;
+                    fr = fm;
+                } else {
+                    l = mid;
+                    fl = fm;
+                }
+            }
+            return (l + r) / 2;
+        }
+
+        function solveFermiPtype(Na, T) {
+            if (Na <= 0) return intrinsicEf(T);
+            const Eg = currentMat.Eg;
+            const left = -0.5;
+            const right = Eg + 0.5;
+
+            function f(Ef) {
+                let n = Nc(T) * Math.exp(-(Eg - Ef) / (kB * T));
+                let p = Nv(T) * Math.exp(-Ef / (kB * T));
+                return p - n - Na;
+            }
+
+            let fl = f(left);
+            let fr = f(right);
+            if (fl * fr > 0) {
+                return (fl < 0) ? right : left;
+            }
+
+            let l = left, r = right;
+            for (let iter = 0; iter < 200; iter++) {
+                let mid = (l + r) / 2;
+                let fm = f(mid);
+                if (Math.abs(fm) < 1e-12) return mid;
+                if (fl * fm <= 0) {
+                    r = mid;
+                    fr = fm;
+                } else {
+                    l = mid;
+                    fl = fm;
+                }
+            }
+            return (l + r) / 2;
+        }
+
+        // 获取当前掺杂类型
+        function getDopType() {
+            for (let radio of dopTypeRadios) {
+                if (radio.checked) return radio.value;
+            }
+            return 'n';
+        }
+
+        // 获取当前材料
+        function getMaterial() {
+            for (let radio of materialRadios) {
+                if (radio.checked) return radio.value;
+            }
+            return 'Si';
+        }
+
+        // 更新材料参数
+        function updateMaterial() {
+            const matKey = getMaterial();
+            currentMat = { ...materials[matKey] };
+        }
+
+        // ---------- 绘制能带（无右侧竖线）----------
+        function drawBands(Ef) {
+            ctx.clearRect(0, 0, width, height);
+
+            const Eg = currentMat.Eg;
+            const E_min = -0.2;
+            const E_max = Eg + 0.2;
+
+            function yPos(E) {
+                return height * (1 - (E - E_min) / (E_max - E_min));
+            }
+
+            // 网格线 (每0.3eV)
+            ctx.strokeStyle = '#ddd';
+            ctx.lineWidth = 0.5;
+            for (let i = 0; i <= 4; i++) {
+                let E = i * 0.3;
+                let y = yPos(E);
+                ctx.beginPath();
+                ctx.moveTo(50, y);
+                ctx.lineTo(width-50, y);
+                ctx.strokeStyle = '#e0e0e0';
+                ctx.stroke();
+            }
+
+            // 导带底 Ec (蓝色)
+            ctx.beginPath();
+            ctx.moveTo(50, yPos(Eg));
+            ctx.lineTo(width-50, yPos(Eg));
+            ctx.strokeStyle = '#1f77b4';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // 价带顶 Ev (红色)
+            ctx.beginPath();
+            ctx.moveTo(50, yPos(0));
+            ctx.lineTo(width-50, yPos(0));
+            ctx.strokeStyle = '#d62728';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // 费米能级 Ef (绿色虚线)
+            ctx.beginPath();
+            ctx.setLineDash([5, 3]);
+            ctx.moveTo(50, yPos(Ef));
+            ctx.lineTo(width-50, yPos(Ef));
+            ctx.strokeStyle = '#2ca02c';
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // 标注 Ec、Ev、Ef 文字
+            ctx.font = '12px Arial';
+            ctx.fillStyle = '#1f77b4';
+            ctx.fillText('Ec', width-70, yPos(Eg)-5);
+            ctx.fillStyle = '#d62728';
+            ctx.fillText('Ev', width-70, yPos(0)+15);
+            ctx.fillStyle = '#2ca02c';
+            ctx.fillText('Ef', width-70, yPos(Ef)-8);
+        }
+
+        // ---------- 主更新函数 ----------
+        function update() {
+            // 读取当前材料
+            updateMaterial();
+
+            // 读取参数
+            let logConc = parseFloat(concSlider.value);
+            let Nd = Math.pow(10, logConc);
+            let T = parseFloat(tempSlider.value);
+            let dopType = getDopType();
+
+            // 计算费米能级
+            let Ef;
+            if (dopType === 'n') {
+                Ef = solveFermiNtype(Nd, T);
+            } else if (dopType === 'p') {
+                Ef = solveFermiPtype(Nd, T);
+            } else {
+                Ef = intrinsicEf(T);
+            }
+
+            // 计算载流子浓度（简并区引入修正因子）
+            const Eg = currentMat.Eg;
+            const kT = kB * T;
+            let n, p;
+
+            if (Ef > Eg) {
+                // n型简并：电子浓度增加
+                let eta = (Ef - Eg) / kT; // 大于0
+                let degeneracyFactor = 1 + 0.2 * eta; // 线性修正因子
+                n = Nc(T) * Math.exp(-(Eg - Ef) / kT) * degeneracyFactor;
+                p = Nv(T) * Math.exp(-Ef / kT);
+            } else if (Ef < 0) {
+                // p型简并：空穴浓度增加
+                let eta = -Ef / kT; // 大于0
+                let degeneracyFactor = 1 + 0.2 * eta;
+                n = Nc(T) * Math.exp(-(Eg - Ef) / kT);
+                p = Nv(T) * Math.exp(-Ef / kT) * degeneracyFactor;
+            } else {
+                // 非简并
+                n = Nc(T) * Math.exp(-(Eg - Ef) / kT);
+                p = Nv(T) * Math.exp(-Ef / kT);
+            }
+
+            let niVal = ni(T);
+            let np = n * p;
+            let ni2 = niVal * niVal;
+
+            // 判断简并（Ef 超出能带范围）用于显示警告
+            if (Ef < 0 || Ef > Eg) {
+                degeneracyWarning.style.display = 'block';
+            } else {
+                degeneracyWarning.style.display = 'none';
+            }
+
+            // 更新信息面板
+            nSpan.textContent = toScientific(n, 2);
+            pSpan.textContent = toScientific(p, 2);
+            npSpan.textContent = toScientific(np, 2);
+            ni2Span.textContent = toScientific(ni2, 2);
+            efSpan.textContent = Ef.toFixed(3) + ' eV';
+            egSpan.textContent = Eg.toFixed(3) + ' eV';
+
+            // 更新滑块标签
+            concValue.textContent = toScientific(Nd, 2) + ' cm⁻³';
+            tempValue.textContent = T + ' K';
+
+            // 更新输入框的值（防止循环触发）
+            concInput.value = toScientific(Nd, 2);
+            tempInput.value = T;
+
+            // 绘制能带
+            drawBands(Ef);
+        }
+
+        // ---------- 事件绑定 ----------
+        // 滑块事件
+        concSlider.addEventListener('input', update);
+        tempSlider.addEventListener('input', update);
+
+        // 单选按钮事件
+        materialRadios.forEach(radio => radio.addEventListener('change', update));
+        dopTypeRadios.forEach(radio => radio.addEventListener('change', update));
+
+        // 输入框事件（失去焦点或回车时更新）
+        function handleConcInput() {
+            let val = parseScientific(concInput.value);
+            if (isNaN(val) || val <= 0) return;
+            let logVal = Math.log10(val);
+            if (logVal < 12) logVal = 12;
+            if (logVal > 19) logVal = 19;
+            concSlider.value = logVal;
+            update();
+        }
+        concInput.addEventListener('blur', handleConcInput);
+        concInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleConcInput(); });
+
+        function handleTempInput() {
+            let val = parseFloat(tempInput.value);
+            if (isNaN(val)) return;
+            if (val < 5) val = 5;
+            if (val > 500) val = 500;
+            tempSlider.value = val;
+            update();
+        }
+        tempInput.addEventListener('blur', handleTempInput);
+        tempInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleTempInput(); });
+
+        // 初始化
+        update();
+    </script>
+</body>
+</html>

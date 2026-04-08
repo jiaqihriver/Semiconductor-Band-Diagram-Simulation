@@ -35,7 +35,7 @@
 
 ## 📁 文件说明
 
-- `band_simulator.html`：唯一的主程序文件，包含所有样式、布局和 JavaScript 代码。
+- `band_diagram_simulator.html`：唯一的主程序文件，包含所有样式、布局和 JavaScript 代码。
 - 无需任何外部依赖或服务器，纯本地运行。
 
 ## 🧪 技术特点
